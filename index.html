@@ -3,181 +3,116 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家族収支管理</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     :root { --line-green: #06C755; }
-    body { font-family: -apple-system, sans-serif; background: #f0f2f5; margin: 0; padding: 15px; }
-    .container { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
-    h2 { color: #333; text-align: center; margin-top: 0; }
-    .form-group { margin-bottom: 15px; }
-    label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; color: #555; }
-    input, select, button { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
-    .cam-btn { background: #555; color: white; text-align: center; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
-    #preview { width: 100%; border-radius: 8px; display: none; margin-bottom: 15px; border: 1px solid #eee; }
-    #submitBtn { background: #ccc; color: white; border: none; font-size: 18px; font-weight: bold; transition: 0.3s; }
-    #submitBtn.active { background: var(--line-green); cursor: pointer; }
-    .status-msg { text-align: center; font-size: 13px; margin-bottom: 15px; font-weight: bold; padding: 10px; border-radius: 8px; }
-    .debug-log { font-size: 10px; color: #666; background: #eee; padding: 10px; margin-top: 20px; border-radius: 5px; white-space: pre-wrap; height: 100px; overflow-y: scroll; border: 1px solid #ddd; }
+    body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
+    .container { background: white; border-radius: 16px; padding: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
+    .tab-menu { display: flex; margin-bottom: 20px; border-bottom: 2px solid #eee; }
+    .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; color: #999; }
+    .tab.active { color: var(--line-green); border-bottom: 2px solid var(--line-green); font-weight: bold; }
+    .page { display: none; }
+    .page.active { display: block; }
+    /* 一覧用スタイル */
+    .list-item { border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; align-items: center; }
+    .list-item:last-child { border: none; }
+    .item-info { font-size: 14px; }
+    .item-amount { font-weight: bold; color: #d9534f; font-size: 16px; }
+    .item-sub { font-size: 11px; color: #999; }
+    .thumbnail { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; margin-left: 10px; }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <h2>収支登録</h2>
-  <div id="userInfo" class="status-msg" style="color: #d9534f; background: #fff5f5;">⚠️ LINE認証中...</div>
-  <hr style="border: 0; border-top: 1px solid #eee; margin-bottom: 20px;">
-
-  <div class="form-group">
-    <label>1. 領収書を撮影</label>
-    <div class="cam-btn" onclick="document.getElementById('camera').click()">📷 カメラを起動</div>
-    <input type="file" id="camera" accept="image/*" capture="environment" style="display:none">
-    <img id="preview">
+  <div class="tab-menu">
+    <div class="tab active" onclick="showPage('input')">入力</div>
+    <div class="tab" onclick="showPage('list')">履歴</div>
   </div>
 
-  <div class="form-group">
-    <label>2. 金額</label>
-    <input type="number" id="amount" placeholder="金額を入力" inputmode="numeric">
+  <div id="inputPage" class="page active">
+    <div id="userInfo" style="font-size:12px; margin-bottom:10px; text-align:right;">認証中...</div>
+    <input type="number" id="amount" placeholder="金額" style="width:100%; padding:12px; margin-bottom:10px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">
+    <input type="text" id="shop" placeholder="支払先" style="width:100%; padding:12px; margin-bottom:10px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">
+    <button id="submitBtn" onclick="sendData()" style="width:100%; padding:15px; background:var(--line-green); color:white; border:none; border-radius:8px; font-weight:bold;">登録する</button>
   </div>
 
-  <div class="form-group">
-    <label>3. 項目</label>
-    <select id="category">
-      <option value="食費">食費</option>
-      <option value="交通費">交通費</option>
-      <option value="ガソリン代">ガソリン代</option>
-      <option value="交際費">交際費</option>
-      <option value="光熱費">光熱費</option>
-      <option value="その他">その他</option>
-    </select>
+  <div id="listPage" class="page">
+    <div id="listContainer">読み込み中...</div>
   </div>
-
-  <div class="form-group">
-    <label>4. 支払先</label>
-    <input type="text" id="shop" placeholder="例: ○○スーパー">
-  </div>
-
-  <div class="form-group">
-    <label>5. 利用日</label>
-    <input type="date" id="date">
-  </div>
-
-  <button id="submitBtn" onclick="sendData()" disabled>認証をお待ちください</button>
-
-  <div class="debug-log" id="log">ログ履歴:</div>
 </div>
 
 <script>
-  // 設定情報
+  const GAS_URL = "あなたのGASのウェブアプリURLをここに貼り付け";
   const LIFF_ID = "2009115464-7gzud84W";
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbxOUKczQx_NTwbKMvHxOsOU8ciAS7xV4jd5b_s4gAutT2ZcRPvHH6q9zRGY3f1hxMme/exec";
-  
   let profile = null;
-  const logEl = document.getElementById('log');
 
-  function addLog(msg) {
-    const now = new Date().toLocaleTimeString();
-    logEl.innerText += "\n[" + now + "] " + msg;
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  // 初期化
-  window.onload = function() {
-    addLog("1. LIFF初期化開始");
-    
-    liff.init({ liffId: LIFF_ID })
-      .then(() => {
-        addLog("2. LIFF初期化成功");
-        if (!liff.isLoggedIn()) {
-          addLog("3. 未ログイン：ログインします");
-          liff.login();
-        } else {
-          addLog("4. ログイン済み：プロフィール取得開始");
-          return liff.getProfile();
-        }
-      })
-      .then(res => {
-        if (!res) return;
-        profile = res;
-        addLog("5. プロフィール取得成功: " + profile.displayName);
-        
-        const infoEl = document.getElementById('userInfo');
-        infoEl.innerText = "✅ ログイン中: " + profile.displayName;
-        infoEl.style.color = "#06C755";
-        infoEl.style.background = "#f5fff5";
-        
-        const btn = document.getElementById('submitBtn');
-        btn.disabled = false;
-        btn.className = "active";
-        btn.innerText = "登録する";
-
-        // GASへ自動登録通知
-        callGas("register", { userId: profile.userId, displayName: profile.displayName });
-      })
-      .catch(err => {
-        addLog("❌ エラー: " + err);
-      });
-
-    document.getElementById('date').value = new Date().toISOString().split('T')[0];
-  };
-
-  // カメラプレビュー
-  document.getElementById('camera').onchange = (e) => {
-    const reader = new FileReader();
-    reader.onload = (f) => {
-      const img = document.getElementById('preview');
-      img.src = f.target.result;
-      img.style.display = 'block';
-    };
-    reader.readAsDataURL(e.target.files[0]);
-  };
-
-  // GAS通信用
-  async function callGas(action, data) {
-    try {
-      addLog(`GAS通信開始: ${action}`);
-      const response = await fetch(GAS_URL, {
-        method: "POST",
-        body: JSON.stringify({ action: action, data: data })
-      });
-      const resData = await response.json();
-      addLog(`GAS応答: ${JSON.stringify(resData)}`);
-      return resData;
-    } catch (err) {
-      addLog(`❌ GAS通信失敗: ${err}`);
-      return { status: "error", message: err.toString() };
+  // ページ切り替え
+  function showPage(pageName) {
+    document.querySelectorAll('.page, .tab').forEach(el => el.classList.remove('active'));
+    if (pageName === 'input') {
+      document.getElementById('inputPage').classList.add('active');
+      document.querySelectorAll('.tab')[0].classList.add('active');
+    } else {
+      document.getElementById('listPage').classList.add('active');
+      document.querySelectorAll('.tab')[1].classList.add('active');
+      fetchList(); // 履歴タブを開いたときにデータを取得
     }
   }
 
-  // 送信処理
+  // 履歴取得
+  async function fetchList() {
+    const container = document.getElementById('listContainer');
+    container.innerHTML = "取得中...";
+    const res = await callGas("getList", {});
+    if (res.status === "success") {
+      container.innerHTML = res.result.length === 0 ? "履歴はありません" : "";
+      res.result.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'list-item';
+        row.innerHTML = `
+          <div class="item-info">
+            <div>${item.shop || '不明な店'}</div>
+            <div class="item-sub">${item.date} (${item.user})</div>
+          </div>
+          <div style="display:flex; align-items:center;">
+            <div class="item-amount">¥${Number(item.amount).toLocaleString()}</div>
+            ${item.imageUrl && item.imageUrl !== "画像なし" ? `<img src="${item.imageUrl}" class="thumbnail" onclick="window.open('${item.imageUrl}')">` : ''}
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    } else {
+      container.innerHTML = "エラーが発生しました";
+    }
+  }
+
+  async function callGas(action, data) {
+    const response = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action, data }) });
+    return await response.json();
+  }
+
+  // LIFF初期化 & 送信処理は以前のものをベースに組み込んでください
+  window.onload = function() {
+    liff.init({ liffId: LIFF_ID }).then(() => {
+      if (!liff.isLoggedIn()) { liff.login(); return; }
+      return liff.getProfile();
+    }).then(p => {
+      if (!p) return;
+      profile = p;
+      document.getElementById('userInfo').innerText = "👤 " + p.displayName;
+    });
+  };
+
   async function sendData() {
     const amt = document.getElementById('amount').value;
-    if (!amt) { alert("金額を入力してください"); return; }
-    
-    const btn = document.getElementById('submitBtn');
-    btn.disabled = true;
-    btn.innerText = "送信中...";
-
-    const payload = {
-      lineId: profile.userId,
-      userName: profile.displayName,
-      amount: amt,
-      category: document.getElementById('category').value,
-      shop: document.getElementById('shop').value,
-      date: document.getElementById('date').value,
-      imageBlob: document.getElementById('preview').src || ""
-    };
-
-    const res = await callGas("upload", payload);
-    
-    if (res.status === "success") {
-      alert("登録完了しました！");
-      liff.closeWindow();
-    } else {
-      alert("エラーが発生しました: " + res.message);
-      btn.disabled = false;
-      btn.innerText = "再試行";
-    }
+    if(!amt) return;
+    const res = await callGas("upload", {
+      lineId: profile.userId, userName: profile.displayName,
+      amount: amt, shop: document.getElementById('shop').value,
+      date: new Date().toISOString().split('T')[0], category: "食費"
+    });
+    if(res.status === "success") { alert("登録完了"); location.reload(); }
   }
 </script>
 </body>
