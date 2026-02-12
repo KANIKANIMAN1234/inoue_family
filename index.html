@@ -2,64 +2,182 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>家族収支管理</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
-    body { font-family: sans-serif; background: #f0f2f5; padding: 20px; }
-    .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
-    button { width: 100%; padding: 15px; background: #06C755; color: white; border: none; border-radius: 8px; font-weight: bold; margin-top: 10px; cursor: pointer; }
-    .log { font-size: 10px; color: #666; background: #eee; padding: 10px; margin-top: 15px; border-radius: 5px; white-space: pre-wrap; }
+    :root { --line-green: #06C755; }
+    body { font-family: -apple-system, sans-serif; background: #f0f2f5; margin: 0; padding: 15px; }
+    .container { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
+    h2 { color: #333; text-align: center; margin-top: 0; }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; color: #555; }
+    input, select, button { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+    .cam-btn { background: #555; color: white; text-align: center; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
+    #preview { width: 100%; border-radius: 8px; display: none; margin-bottom: 15px; border: 1px solid #eee; }
+    #submitBtn { background: #ccc; color: white; border: none; font-size: 18px; font-weight: bold; transition: 0.3s; }
+    #submitBtn.active { background: var(--line-green); cursor: pointer; }
+    .status-msg { text-align: center; font-size: 13px; margin-bottom: 15px; font-weight: bold; padding: 10px; border-radius: 8px; }
+    .debug-log { font-size: 10px; color: #666; background: #eee; padding: 10px; margin-top: 20px; border-radius: 5px; white-space: pre-wrap; height: 100px; overflow-y: scroll; border: 1px solid #ddd; }
   </style>
 </head>
 <body>
-<div class="card">
-  <h2>収支登録 (Vercel版)</h2>
-  <div id="status">認証中...</div>
-  <input type="number" id="amount" placeholder="金額" style="width:100%; padding:10px; margin-top:10px; box-sizing:border-box;">
-  <button id="btn" onclick="sendToGas()" disabled>登録する</button>
-  <div class="log" id="log">ログ:</div>
+
+<div class="container">
+  <h2>収支登録</h2>
+  <div id="userInfo" class="status-msg" style="color: #d9534f; background: #fff5f5;">⚠️ LINE認証中...</div>
+  <hr style="border: 0; border-top: 1px solid #eee; margin-bottom: 20px;">
+
+  <div class="form-group">
+    <label>1. 領収書を撮影</label>
+    <div class="cam-btn" onclick="document.getElementById('camera').click()">📷 カメラを起動</div>
+    <input type="file" id="camera" accept="image/*" capture="environment" style="display:none">
+    <img id="preview">
+  </div>
+
+  <div class="form-group">
+    <label>2. 金額</label>
+    <input type="number" id="amount" placeholder="金額を入力" inputmode="numeric">
+  </div>
+
+  <div class="form-group">
+    <label>3. 項目</label>
+    <select id="category">
+      <option value="食費">食費</option>
+      <option value="交通費">交通費</option>
+      <option value="ガソリン代">ガソリン代</option>
+      <option value="交際費">交際費</option>
+      <option value="光熱費">光熱費</option>
+      <option value="その他">その他</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>4. 支払先</label>
+    <input type="text" id="shop" placeholder="例: ○○スーパー">
+  </div>
+
+  <div class="form-group">
+    <label>5. 利用日</label>
+    <input type="date" id="date">
+  </div>
+
+  <button id="submitBtn" onclick="sendData()" disabled>認証をお待ちください</button>
+
+  <div class="debug-log" id="log">ログ履歴:</div>
 </div>
 
 <script>
+  // 設定情報
   const LIFF_ID = "2009115464-7gzud84W";
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbxOUKczQx_NTwbKMvHxOsOU8ciAS7xV4jd5b_s4gAutT2ZcRPvHH6q9zRGY3f1hxMme/exec"; 
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxOUKczQx_NTwbKMvHxOsOU8ciAS7xV4jd5b_s4gAutT2ZcRPvHH6q9zRGY3f1hxMme/exec";
+  
   let profile = null;
+  const logEl = document.getElementById('log');
 
-  window.onload = function() {
-    liff.init({ liffId: LIFF_ID }).then(() => {
-      if (!liff.isLoggedIn()) { liff.login(); return; }
-      return liff.getProfile();
-    }).then(p => {
-      profile = p;
-      document.getElementById('status').innerText = "✅ " + p.displayName;
-      document.getElementById('btn').disabled = false;
-      
-      // GASへ自動登録通知
-      callGas("register", { userId: p.userId, displayName: p.displayName });
-    });
-  };
-
-  async function callGas(action, data) {
-    document.getElementById('log').innerText += `\n> GAS呼び出し: ${action}`;
-    const response = await fetch(GAS_URL, {
-      method: "POST",
-      body: JSON.stringify({ action: action, data: data })
-    });
-    const resData = await response.json();
-    document.getElementById('log').innerText += `\n> GAS返答: ${JSON.stringify(resData)}`;
-    return resData;
+  function addLog(msg) {
+    const now = new Date().toLocaleTimeString();
+    logEl.innerText += "\n[" + now + "] " + msg;
+    logEl.scrollTop = logEl.scrollHeight;
   }
 
-  async function sendToGas() {
+  // 初期化
+  window.onload = function() {
+    addLog("1. LIFF初期化開始");
+    
+    liff.init({ liffId: LIFF_ID })
+      .then(() => {
+        addLog("2. LIFF初期化成功");
+        if (!liff.isLoggedIn()) {
+          addLog("3. 未ログイン：ログインします");
+          liff.login();
+        } else {
+          addLog("4. ログイン済み：プロフィール取得開始");
+          return liff.getProfile();
+        }
+      })
+      .then(res => {
+        if (!res) return;
+        profile = res;
+        addLog("5. プロフィール取得成功: " + profile.displayName);
+        
+        const infoEl = document.getElementById('userInfo');
+        infoEl.innerText = "✅ ログイン中: " + profile.displayName;
+        infoEl.style.color = "#06C755";
+        infoEl.style.background = "#f5fff5";
+        
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = false;
+        btn.className = "active";
+        btn.innerText = "登録する";
+
+        // GASへ自動登録通知
+        callGas("register", { userId: profile.userId, displayName: profile.displayName });
+      })
+      .catch(err => {
+        addLog("❌ エラー: " + err);
+      });
+
+    document.getElementById('date').value = new Date().toISOString().split('T')[0];
+  };
+
+  // カメラプレビュー
+  document.getElementById('camera').onchange = (e) => {
+    const reader = new FileReader();
+    reader.onload = (f) => {
+      const img = document.getElementById('preview');
+      img.src = f.target.result;
+      img.style.display = 'block';
+    };
+    reader.readAsDataURL(e.target.files[0]);
+  };
+
+  // GAS通信用
+  async function callGas(action, data) {
+    try {
+      addLog(`GAS通信開始: ${action}`);
+      const response = await fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: action, data: data })
+      });
+      const resData = await response.json();
+      addLog(`GAS応答: ${JSON.stringify(resData)}`);
+      return resData;
+    } catch (err) {
+      addLog(`❌ GAS通信失敗: ${err}`);
+      return { status: "error", message: err.toString() };
+    }
+  }
+
+  // 送信処理
+  async function sendData() {
     const amt = document.getElementById('amount').value;
-    if(!amt) return;
-    await callGas("upload", {
+    if (!amt) { alert("金額を入力してください"); return; }
+    
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerText = "送信中...";
+
+    const payload = {
       lineId: profile.userId,
       userName: profile.displayName,
       amount: amt,
-      date: new Date().toISOString().split('T')[0]
-    });
-    alert("登録完了");
-    liff.closeWindow();
+      category: document.getElementById('category').value,
+      shop: document.getElementById('shop').value,
+      date: document.getElementById('date').value,
+      imageBlob: document.getElementById('preview').src || ""
+    };
+
+    const res = await callGas("upload", payload);
+    
+    if (res.status === "success") {
+      alert("登録完了しました！");
+      liff.closeWindow();
+    } else {
+      alert("エラーが発生しました: " + res.message);
+      btn.disabled = false;
+      btn.innerText = "再試行";
+    }
   }
 </script>
 </body>
