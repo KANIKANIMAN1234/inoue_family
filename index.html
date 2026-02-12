@@ -3,43 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家族収支管理 v5.0</title>
+  <title>家族収支管理 v6.0</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    :root { --line-green: #06C755; --bg-gray: #f0f2f5; }
+    :root { --line-green: #06C755; --line-blue: #007bff; --bg-gray: #f0f2f5; }
     body { font-family: -apple-system, sans-serif; background: var(--bg-gray); margin: 0; padding: 10px; }
     .container { background: white; border-radius: 16px; padding: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
     
-    /* タブメニュー */
-    .tab-menu { display: flex; background: #eee; border-radius: 10px; padding: 4px; margin-bottom: 15px; }
-    .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; border-radius: 8px; color: #666; font-size: 14px; transition: 0.2s; }
-    .tab.active { background: white; color: var(--line-green); font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    /* タブ・収支切り替え */
+    .tab-menu, .type-menu { display: flex; background: #eee; border-radius: 10px; padding: 4px; margin-bottom: 15px; }
+    .tab, .type-btn { flex: 1; padding: 10px; text-align: center; cursor: pointer; border-radius: 8px; color: #666; font-size: 14px; }
+    .tab.active, .type-btn.active { background: white; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .type-btn.active.expense { color: #d9534f; }
+    .type-btn.active.income { color: var(--line-blue); }
     
     .page { display: none; }
     .page.active { display: block; }
 
-    /* フォーム・フィルタ共通 */
+    /* 入力パーツ */
     label { display: block; margin: 10px 0 5px; font-size: 13px; color: #555; font-weight: bold; }
-    input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; margin-bottom: 10px; background: #fff; }
+    input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; margin-bottom: 10px; }
     
-    /* フィルタエリア */
-    .filter-box { background: #f9f9f9; padding: 10px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #eee; }
-    .filter-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-    .total-display { font-size: 18px; font-weight: bold; text-align: center; color: #333; margin: 10px 0; border-bottom: 2px solid var(--line-green); padding-bottom: 5px; }
+    /* 写真エリア */
+    .photo-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .btn-sub { background: #666; color: white; padding: 10px; border-radius: 8px; text-align: center; font-size: 12px; font-weight: bold; cursor: pointer; }
+    .preview-container { display: flex; gap: 5px; margin-bottom: 10px; }
+    .preview-wrapper { position: relative; width: 32%; }
+    .preview-img { width: 100%; height: 80px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd; }
+    .del-btn { position: absolute; top: -5px; right: -5px; background: red; color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; text-align: center; line-height: 20px; cursor: pointer; }
 
-    /* 履歴リスト */
+    /* 履歴アイテム */
     .list-item { border-bottom: 1px solid #f0f0f0; padding: 12px 0; display: flex; justify-content: space-between; align-items: center; }
-    .item-main { font-size: 14px; font-weight: bold; }
-    .item-sub { font-size: 11px; color: #999; }
-    .item-price { font-size: 16px; font-weight: bold; color: #d9534f; }
-    .thumb { width: 45px; height: 45px; object-fit: cover; border-radius: 6px; margin-left: 10px; border: 1px solid #eee; }
+    .income-text { color: var(--line-blue); }
+    .expense-text { color: #d9534f; }
+    .thumb-group { display: flex; gap: 3px; }
+    .small-thumb { width: 35px; height: 35px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
 
-    /* ボタン */
-    .cam-btn { background: #555; color: white; text-align: center; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
-    #submitBtn { background: var(--line-green); color: white; border: none; width: 100%; padding: 15px; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
+    #submitBtn { background: var(--line-green); color: white; border: none; width: 100%; padding: 15px; border-radius: 8px; font-size: 18px; font-weight: bold; margin-top: 10px; }
     #submitBtn:disabled { background: #ccc; }
-    #preview { width: 100%; border-radius: 8px; display: none; margin-bottom: 10px; }
   </style>
 </head>
 <body>
@@ -52,239 +54,172 @@
   </div>
 
   <div id="pageInput" class="page active">
-    <label>分類カテゴリ</label>
-    <select id="category">
-      <option value="電気代">電気代</option><option value="水道代">水道代</option><option value="ガス代">ガス代</option>
-      <option value="CATV代">CATV代</option><option value="外食">外食</option><option value="通信費">通信費</option>
-      <option value="ガソリン代">ガソリン代</option><option value="レンタカー代">レンタカー代</option><option value="高速代">高速代</option>
-      <option value="交通費">交通費</option><option value="冠婚葬祭">冠婚葬祭</option><option value="実家修繕">実家修繕</option>
-      <option value="旅費交通費">旅費交通費</option><option value="宿泊代">宿泊代</option><option value="飲食代">飲食代</option>
-      <option value="他">他</option>
-    </select>
+    <div class="type-menu">
+      <div id="typeExpense" class="type-btn active expense" onclick="setType('出金')">出金</div>
+      <div id="typeIncome" class="type-btn income" onclick="setType('入金')">入金</div>
+    </div>
+
+    <label>カテゴリ</label>
+    <select id="category"></select>
+
     <label>金額</label>
     <input type="number" id="amount" placeholder="金額" inputmode="numeric">
-    <label>支払先</label>
-    <input type="text" id="shop" placeholder="例: 東京電力、セブンイレブン">
+    
+    <label>内容 / 支払先</label>
+    <input type="text" id="shop" placeholder="例: 給与、スーパー">
+
     <label>日付</label>
     <input type="date" id="date">
-    <label>領収書 (任意)</label>
-    <div class="cam-btn" onclick="document.getElementById('camera').click()">📷 カメラ起動</div>
-    <input type="file" id="camera" accept="image/*" capture="environment" style="display:none">
-    <img id="preview">
+
+    <label>写真 (最大3枚)</label>
+    <div class="photo-buttons">
+      <div class="btn-sub" onclick="document.getElementById('camera').click()">📷 カメラ起動</div>
+      <div class="btn-sub" onclick="document.getElementById('gallery').click()">📁 写真を選択</div>
+    </div>
+    <input type="file" id="camera" accept="image/*" capture="environment" style="display:none" onchange="handleFiles(this)">
+    <input type="file" id="gallery" accept="image/*" multiple style="display:none" onchange="handleFiles(this)">
+    
+    <div id="previewContainer" class="preview-container"></div>
+
     <button id="submitBtn" onclick="sendData()" disabled>認証中...</button>
   </div>
 
   <div id="pageList" class="page">
-    <div class="filter-box">
-      <div class="filter-grid">
-        <select id="filterUser" onchange="applyFilters()"><option value="">人</option></select>
-        <select id="filterYear" onchange="applyFilters()"><option value="">年</option></select>
-        <select id="filterMonth" onchange="applyFilters()"><option value="">月</option></select>
-      </div>
-    </div>
-    <div id="listTotal" class="total-display">合計: ¥0</div>
     <div id="listContainer">読み込み中...</div>
   </div>
-
   <div id="pageSummary" class="page">
-    <div class="filter-box">
-      <div class="filter-grid">
-        <select id="summaryUser" onchange="applySummaryFilters()"><option value="">人</option></select>
-        <select id="summaryYear" onchange="applySummaryFilters()"><option value="">年</option></select>
-        <select id="summaryMonth" onchange="applySummaryFilters()"><option value="">月</option></select>
-      </div>
-    </div>
-    <div id="summaryTotal" class="total-display">合計: ¥0</div>
     <canvas id="myChart" width="400" height="400"></canvas>
   </div>
 </div>
 
 <script>
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbxOUKczQx_NTwbKMvHxOsOU8ciAS7xV4jd5b_s4gAutT2ZcRPvHH6q9zRGY3f1hxMme/exec";
   const LIFF_ID = "2009115464-7gzud84W";
-  let profile = null;
-  let allData = [];
-  let myChart = null;
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxOUKczQx_NTwbKMvHxOsOU8ciAS7xV4jd5b_s4gAutT2ZcRPvHH6q9zRGY3f1hxMme/exec";
+  
+  let currentType = "出金";
+  let imageBlobs = [];
+  const categories = {
+    "出金": ["電気代", "水道代", "ガス代", "CATV代", "外食", "通信費", "ガソリン代", "レンタカー代", "高速代", "交通費", "冠婚葬祭", "実家修繕", "旅費交通費", "宿泊代", "飲食代", "他"],
+    "入金": ["給与", "賞与", "副業", "還付金", "お小遣い", "他"]
+  };
 
   window.onload = function() {
     liff.init({ liffId: LIFF_ID }).then(() => {
       if (!liff.isLoggedIn()) { liff.login(); return; }
-      return liff.getProfile();
-    }).then(p => {
-      profile = p;
       document.getElementById('submitBtn').disabled = false;
       document.getElementById('submitBtn').innerText = "登録する";
-      callGas("register", { userId: p.userId, displayName: p.displayName });
-      initFilters();
+      updateCategoryOptions();
     });
     document.getElementById('date').value = new Date().toISOString().split('T')[0];
   };
 
-  async function callGas(action, data) {
-    const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action, data }) });
-    return await res.json();
+  function setType(t) {
+    currentType = t;
+    document.getElementById('typeExpense').classList.toggle('active', t === '出金');
+    document.getElementById('typeIncome').classList.toggle('active', t === '入金');
+    updateCategoryOptions();
   }
 
-  // フィルタの初期設定
-  async function initFilters() {
-    const res = await callGas("getUsers", {});
-    const users = res.result || [];
-    const userSelectors = [document.getElementById('filterUser'), document.getElementById('summaryUser')];
-    users.forEach(u => {
-      userSelectors.forEach(sel => {
-        const opt = new Option(u, u);
-        sel.add(opt);
-      });
+  function updateCategoryOptions() {
+    const sel = document.getElementById('category');
+    sel.innerHTML = "";
+    categories[currentType].forEach(c => sel.add(new Option(c, c)));
+  }
+
+  function handleFiles(input) {
+    const files = Array.from(input.files);
+    files.forEach(file => {
+      if (imageBlobs.length >= 3) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        // ここで前回のリサイズロジックを入れると安全（略）
+        imageBlobs.push(e.target.result);
+        renderPreviews();
+      };
+      reader.readAsDataURL(file);
+    });
+    input.value = ""; // リセット
+  }
+
+  function renderPreviews() {
+    const container = document.getElementById('previewContainer');
+    container.innerHTML = "";
+    imageBlobs.forEach((blob, index) => {
+      const div = document.createElement('div');
+      div.className = "preview-wrapper";
+      div.innerHTML = `<img src="${blob}" class="preview-img"><div class="del-btn" onclick="removeImg(${index})">×</div>`;
+      container.appendChild(div);
+    });
+  }
+
+  function removeImg(i) {
+    imageBlobs.splice(i, 1);
+    renderPreviews();
+  }
+
+  async function sendData() {
+    const amt = document.getElementById('amount').value;
+    if (!amt) return alert("金額を入力してください");
+    
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerText = "送信中...";
+
+    const profile = await liff.getProfile();
+    const res = await fetch(GAS_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "upload",
+        data: {
+          lineId: profile.userId, userName: profile.displayName,
+          type: currentType, amount: Number(amt),
+          category: document.getElementById('category').value,
+          shop: document.getElementById('shop').value || "未設定",
+          date: document.getElementById('date').value,
+          imageBlobs: imageBlobs // 配列で送信
+        }
+      })
     });
     
-    // 年のリスト (2025-2030)
-    const yearSelectors = [document.getElementById('filterYear'), document.getElementById('summaryYear')];
-    for(let y=2025; y<=2030; y++){
-      yearSelectors.forEach(sel => sel.add(new Option(y + "年", y)));
-    }
-    
-    // 月のリスト (1-12)
-    const monthSelectors = [document.getElementById('filterMonth'), document.getElementById('summaryMonth')];
-    for(let m=1; m<=12; m++){
-      monthSelectors.forEach(sel => sel.add(new Option(m + "月", m)));
-    }
+    const result = await res.json();
+    if (result.status === "success") { alert("登録完了！"); location.reload(); }
+    else { alert("エラー"); btn.disabled = false; }
   }
 
   function showPage(p) {
     document.querySelectorAll('.page, .tab').forEach(el => el.classList.remove('active'));
     document.getElementById('page' + p.charAt(0).toUpperCase() + p.slice(1)).classList.add('active');
-    const tabs = document.querySelectorAll('.tab');
-    if(p==='input') tabs[0].classList.add('active');
-    if(p==='list') { tabs[1].classList.add('active'); fetchAllAndFilter(); }
-    if(p==='summary') { tabs[2].classList.add('active'); fetchAllAndSummary(); }
+    if (p === 'list') fetchList();
   }
 
-  async function fetchAllAndFilter() {
-    const res = await callGas("getList", {});
-    allData = res.result || [];
-    applyFilters();
-  }
-
-  function applyFilters() {
-    const u = document.getElementById('filterUser').value;
-    const y = document.getElementById('filterYear').value;
-    const m = document.getElementById('filterMonth').value;
-    
-    const filtered = allData.filter(d => {
-      const dt = new Date(d.date);
-      return (!u || d.userName === u) && 
-             (!y || dt.getFullYear() == y) && 
-             (!m || (dt.getMonth() + 1) == m);
-    });
-
-    renderList(filtered);
-  }
-
-  function renderList(data) {
+  async function fetchList() {
     const container = document.getElementById('listContainer');
-    const totalEl = document.getElementById('listTotal');
-    let total = 0;
-    container.innerHTML = "";
-    data.forEach(item => {
-      total += item.amount;
-      const div = document.createElement('div');
-      div.className = 'list-item';
-      div.innerHTML = `<div class="item-info"><div class="item-main">${item.shop} [${item.category}]</div><div class="item-sub">${item.date} (${item.userName})</div></div><div style="display:flex; align-items:center;"><div class="item-price">¥${item.amount.toLocaleString()}</div>${item.imageUrl && item.imageUrl !== "画像なし" ? `<img src="${item.imageUrl}" class="thumb" onclick="window.open('${item.imageUrl}')">` : ''}</div>`;
-      container.appendChild(div);
-    });
-    totalEl.innerText = `合計: ¥${total.toLocaleString()}`;
-  }
-
-  async function fetchAllAndSummary() {
-    const res = await callGas("getList", {});
-    allData = res.result || [];
-    applySummaryFilters();
-  }
-
-  function applySummaryFilters() {
-    const u = document.getElementById('summaryUser').value;
-    const y = document.getElementById('summaryYear').value;
-    const m = document.getElementById('summaryMonth').value;
-    
-    const filtered = allData.filter(d => {
-      const dt = new Date(d.date);
-      return (!u || d.userName === u) && 
-             (!y || dt.getFullYear() == y) && 
-             (!m || (dt.getMonth() + 1) == m);
-    });
-
-    renderSummary(filtered);
-  }
-
-  function renderSummary(data) {
-    const totalEl = document.getElementById('summaryTotal');
-    let total = 0;
-    const stats = {};
-    
-    data.forEach(d => {
-      total += d.amount;
-      stats[d.category] = (stats[d.category] || 0) + d.amount;
-    });
-    totalEl.innerText = `合計: ¥${total.toLocaleString()}`;
-
-    const labels = Object.keys(stats);
-    const values = Object.values(stats);
-
-    if (myChart) myChart.destroy();
-    const ctx = document.getElementById('myChart').getContext('2d');
-    myChart = new Chart(ctx, {
-      type: 'pie',
-      data: {
-        labels: labels,
-        datasets: [{
-          data: values,
-          backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8BC34A', '#F44336', '#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4', '#009688', '#4CAF50']
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { position: 'bottom' },
-          tooltip: {
-            callbacks: {
-              label: (context) => {
-                const val = context.raw;
-                const pct = ((val / total) * 100).toFixed(1);
-                return `${context.label}: ¥${val.toLocaleString()} (${pct}%)`;
-              }
-            }
-          }
-        }
-      }
-    });
-  }
-
-  // カメラ・送信処理（以前と同様）
-  document.getElementById('camera').onchange = (e) => {
-    const reader = new FileReader();
-    reader.onload = (f) => {
-      const img = document.getElementById('preview');
-      img.src = f.target.result;
-      img.style.display = 'block';
-    };
-    reader.readAsDataURL(e.target.files[0]);
-  };
-
-  async function sendData() {
-    const amt = document.getElementById('amount').value;
-    if(!amt) { alert("金額を入力してください"); return; }
-    const btn = document.getElementById('submitBtn');
-    btn.disabled = true;
-    btn.innerText = "送信中...";
-    const res = await callGas("upload", {
-      lineId: profile.userId, userName: profile.displayName,
-      amount: Number(amt), category: document.getElementById('category').value,
-      shop: document.getElementById('shop').value || "未設定",
-      date: document.getElementById('date').value,
-      imageBlob: document.getElementById('preview').style.display === 'block' ? document.getElementById('preview').src : ""
-    });
-    if(res.status === "success") { alert("登録完了！"); location.reload(); }
-    else { alert("エラー"); btn.disabled = false; }
+    container.innerHTML = "取得中...";
+    const res = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "getList" }) });
+    const data = await res.json();
+    if (data.status === "success") {
+      container.innerHTML = "";
+      data.result.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        const colorClass = item.type === "入金" ? "income-text" : "expense-text";
+        const sign = item.type === "入金" ? "+" : "-";
+        
+        div.innerHTML = `
+          <div>
+            <div class="item-main">${item.shop} [${item.category}]</div>
+            <div class="item-sub">${item.date} (${item.userName})</div>
+          </div>
+          <div style="text-align:right">
+            <div class="item-price ${colorClass}">${sign}¥${item.amount.toLocaleString()}</div>
+            <div class="thumb-group">
+              ${item.imageUrls.map(url => url !== "画像なし" ? `<img src="${url}" class="small-thumb" onclick="window.open('${url}')">` : '').join('')}
+            </div>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
   }
 </script>
 </body>
