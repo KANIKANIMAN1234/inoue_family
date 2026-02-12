@@ -3,60 +3,107 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>家族収支管理</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     :root { --line-green: #06C755; }
-    body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
+    body { font-family: -apple-system, sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
     .container { background: white; border-radius: 16px; padding: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
-    .tab-menu { display: flex; margin-bottom: 20px; border-bottom: 2px solid #eee; }
-    .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; color: #999; }
-    .tab.active { color: var(--line-green); border-bottom: 2px solid var(--line-green); font-weight: bold; }
+    /* タブメニュー */
+    .tab-menu { display: flex; margin-bottom: 20px; background: #eee; border-radius: 8px; padding: 4px; }
+    .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; border-radius: 6px; color: #666; font-weight: bold; }
+    .tab.active { background: white; color: var(--line-green); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .page { display: none; }
     .page.active { display: block; }
-    /* 一覧用スタイル */
-    .list-item { border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; align-items: center; }
-    .list-item:last-child { border: none; }
-    .item-info { font-size: 14px; }
-    .item-amount { font-weight: bold; color: #d9534f; font-size: 16px; }
+    /* フォーム表示 */
+    label { display: block; margin: 10px 0 5px; font-size: 14px; color: #555; font-weight: bold; }
+    input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; margin-bottom: 10px; }
+    .cam-btn { background: #555; color: white; text-align: center; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    #preview { width: 100%; border-radius: 8px; display: none; margin: 10px 0; border: 1px solid #eee; }
+    #submitBtn { background: var(--line-green); color: white; border: none; width: 100%; padding: 15px; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
+    #submitBtn:disabled { background: #ccc; cursor: not-allowed; }
+    /* 履歴リスト */
+    .list-item { border-bottom: 1px solid #f0f0f0; padding: 12px 0; display: flex; justify-content: space-between; align-items: center; }
+    .item-main { font-size: 14px; font-weight: bold; }
     .item-sub { font-size: 11px; color: #999; }
-    .thumbnail { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; margin-left: 10px; }
+    .item-price { font-size: 16px; font-weight: bold; color: #d9534f; }
+    .thumb { width: 45px; height: 45px; object-fit: cover; border-radius: 6px; margin-left: 10px; border: 1px solid #eee; }
+    .log-box { font-size: 9px; color: #bbb; background: #fafafa; padding: 5px; margin-top: 15px; border-radius: 4px; white-space: pre-wrap; }
   </style>
 </head>
 <body>
 
 <div class="container">
   <div class="tab-menu">
-    <div class="tab active" onclick="showPage('input')">入力</div>
-    <div class="tab" onclick="showPage('list')">履歴</div>
+    <div id="tabInput" class="tab active" onclick="showPage('input')">入力</div>
+    <div id="tabList" class="tab" onclick="showPage('list')">履歴</div>
   </div>
 
-  <div id="inputPage" class="page active">
-    <div id="userInfo" style="font-size:12px; margin-bottom:10px; text-align:right;">認証中...</div>
-    <input type="number" id="amount" placeholder="金額" style="width:100%; padding:12px; margin-bottom:10px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">
-    <input type="text" id="shop" placeholder="支払先" style="width:100%; padding:12px; margin-bottom:10px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box;">
-    <button id="submitBtn" onclick="sendData()" style="width:100%; padding:15px; background:var(--line-green); color:white; border:none; border-radius:8px; font-weight:bold;">登録する</button>
+  <div id="pageInput" class="page active">
+    <label>金額</label>
+    <input type="number" id="amount" placeholder="金額を入力" inputmode="numeric">
+    <label>支払先</label>
+    <input type="text" id="shop" placeholder="例: スーパー、コンビニ">
+    <label>日付</label>
+    <input type="date" id="date">
+    <label>領収書写真 (任意)</label>
+    <div class="cam-btn" onclick="document.getElementById('camera').click()">📷 カメラ起動</div>
+    <input type="file" id="camera" accept="image/*" capture="environment" style="display:none">
+    <img id="preview">
+    <button id="submitBtn" onclick="sendData()" disabled>認証中...</button>
   </div>
 
-  <div id="listPage" class="page">
+  <div id="pageList" class="page">
     <div id="listContainer">読み込み中...</div>
   </div>
+
+  <div class="log-box" id="log">Logs: App Ready</div>
 </div>
 
 <script>
-  const GAS_URL = "あなたのGASのウェブアプリURLをここに貼り付け";
   const LIFF_ID = "2009115464-7gzud84W";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxOUKczQx_NTwbKMvHxOsOU8ciAS7xV4jd5b_s4gAutT2ZcRPvHH6q9zRGY3f1hxMme/exec";
   let profile = null;
 
-  // ページ切り替え
-  function showPage(pageName) {
-    document.querySelectorAll('.page, .tab').forEach(el => el.classList.remove('active'));
-    if (pageName === 'input') {
-      document.getElementById('inputPage').classList.add('active');
-      document.querySelectorAll('.tab')[0].classList.add('active');
-    } else {
-      document.getElementById('listPage').classList.add('active');
-      document.querySelectorAll('.tab')[1].classList.add('active');
-      fetchList(); // 履歴タブを開いたときにデータを取得
+  function addLog(m) { document.getElementById('log').innerText += "\n> " + m; }
+
+  // 初期化
+  window.onload = function() {
+    liff.init({ liffId: LIFF_ID }).then(() => {
+      if (!liff.isLoggedIn()) { liff.login(); return; }
+      return liff.getProfile();
+    }).then(p => {
+      if (!p) return;
+      profile = p;
+      document.getElementById('submitBtn').disabled = false;
+      document.getElementById('submitBtn').innerText = "登録する";
+      addLog("Login: " + p.displayName);
+      callGas("register", { userId: p.userId, displayName: p.displayName });
+    }).catch(err => addLog("Error: " + err));
+
+    document.getElementById('date').value = new Date().toISOString().split('T')[0];
+  };
+
+  // タブ切り替え
+  function showPage(p) {
+    document.getElementById('pageInput').classList.toggle('active', p === 'input');
+    document.getElementById('pageList').classList.toggle('active', p === 'list');
+    document.getElementById('tabInput').classList.toggle('active', p === 'input');
+    document.getElementById('tabList').classList.toggle('active', p === 'list');
+    if (p === 'list') fetchList();
+  }
+
+  // GAS通信用
+  async function callGas(action, data) {
+    try {
+      const response = await fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({ action, data })
+      });
+      return await response.json();
+    } catch (e) {
+      addLog("Fetch Error: " + e);
+      return { status: "error" };
     }
   }
 
@@ -66,53 +113,67 @@
     container.innerHTML = "取得中...";
     const res = await callGas("getList", {});
     if (res.status === "success") {
-      container.innerHTML = res.result.length === 0 ? "履歴はありません" : "";
-      res.result.forEach(item => {
-        const row = document.createElement('div');
-        row.className = 'list-item';
-        row.innerHTML = `
+      const list = res.result;
+      if (list.length === 0) { container.innerHTML = "履歴はありません"; return; }
+      container.innerHTML = "";
+      list.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        div.innerHTML = `
           <div class="item-info">
-            <div>${item.shop || '不明な店'}</div>
-            <div class="item-sub">${item.date} (${item.user})</div>
+            <div class="item-main">${item.shop || '不明'}</div>
+            <div class="item-sub">${item.date} (${item.userName})</div>
           </div>
           <div style="display:flex; align-items:center;">
-            <div class="item-amount">¥${Number(item.amount).toLocaleString()}</div>
-            ${item.imageUrl && item.imageUrl !== "画像なし" ? `<img src="${item.imageUrl}" class="thumbnail" onclick="window.open('${item.imageUrl}')">` : ''}
+            <div class="item-price">¥${Number(item.amount).toLocaleString()}</div>
+            ${item.imageUrl && item.imageUrl !== "画像なし" ? `<img src="${item.imageUrl}" class="thumb" onclick="window.open('${item.imageUrl}')">` : ''}
           </div>
         `;
-        container.appendChild(row);
+        container.appendChild(div);
       });
     } else {
-      container.innerHTML = "エラーが発生しました";
+      container.innerHTML = "データ取得に失敗しました。";
     }
   }
 
-  async function callGas(action, data) {
-    const response = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action, data }) });
-    return await response.json();
-  }
-
-  // LIFF初期化 & 送信処理は以前のものをベースに組み込んでください
-  window.onload = function() {
-    liff.init({ liffId: LIFF_ID }).then(() => {
-      if (!liff.isLoggedIn()) { liff.login(); return; }
-      return liff.getProfile();
-    }).then(p => {
-      if (!p) return;
-      profile = p;
-      document.getElementById('userInfo').innerText = "👤 " + p.displayName;
-    });
+  // カメラプレビュー
+  document.getElementById('camera').onchange = (e) => {
+    const reader = new FileReader();
+    reader.onload = (f) => {
+      const img = document.getElementById('preview');
+      img.src = f.target.result;
+      img.style.display = 'block';
+    };
+    reader.readAsDataURL(e.target.files[0]);
   };
 
+  // データ送信
   async function sendData() {
     const amt = document.getElementById('amount').value;
-    if(!amt) return;
+    if (!amt) { alert("金額を入力してください"); return; }
+    
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerText = "送信中...";
+
     const res = await callGas("upload", {
-      lineId: profile.userId, userName: profile.displayName,
-      amount: amt, shop: document.getElementById('shop').value,
-      date: new Date().toISOString().split('T')[0], category: "食費"
+      lineId: profile.userId,
+      userName: profile.displayName,
+      amount: amt,
+      shop: document.getElementById('shop').value || "未設定",
+      date: document.getElementById('date').value,
+      category: "その他",
+      imageBlob: document.getElementById('preview').src || ""
     });
-    if(res.status === "success") { alert("登録完了"); location.reload(); }
+
+    if (res.status === "success") {
+      alert("登録完了しました！");
+      location.reload();
+    } else {
+      alert("エラーが発生しました");
+      btn.disabled = false;
+      btn.innerText = "再試行";
+    }
   }
 </script>
 </body>
