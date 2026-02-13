@@ -142,6 +142,7 @@
   let allData = [];
   let myChart = null;
   let myBarChart = null;
+  let userList = []; // ユーザーリスト（LINE IDと名前のマッピング用）
   const categories = {
     "出金": ["電気代", "水道代", "ガス代", "CATV代", "外食", "通信費", "ガソリン代", "レンタカー代", "高速代", "交通費", "冠婚葬祭", "実家修繕", "旅費交通費", "宿泊代", "飲食代", "他"],
     "入金": ["給与", "賞与", "副業", "還付金", "お小遣い", "年金", "冠婚葬祭", "他"]
@@ -184,13 +185,13 @@
    */
   async function initFilters() {
     const res = await callGas("getUsers", {});
-    const users = res.result || []; // [{lineId: "xxx", name: "太郎"}, ...]
+    userList = res.result || []; // [{lineId: "xxx", name: "太郎"}, ...]
     
     // ユーザー選択肢（値はlineId、表示は名前）
     const userSels = [document.getElementById('filterUser'), document.getElementById('summaryUser')];
     userSels.forEach(s => {
       s.innerHTML = '<option value="">全員</option>';
-      users.forEach(u => s.add(new Option(u.name, u.lineId)));
+      userList.forEach(u => s.add(new Option(u.name, u.lineId)));
     });
     
     // 年選択肢 (2025〜2030)
@@ -310,7 +311,15 @@
     });
 
     const expenseData = balanceData.filter(d => d.type === "出金" && (!c || d.category === c));
-    let centerName = (u || "全員"), period = (y ? y + "年" : "") + (m ? m + "月" : "") || "全期間";
+    
+    // LINE IDから名前を取得
+    let centerName = "全員";
+    if (u) {
+      const user = userList.find(usr => usr.lineId === u);
+      centerName = user ? user.name : u;
+    }
+    
+    let period = (y ? y + "年" : "") + (m ? m + "月" : "") || "全期間";
     renderSummary(expenseData, balanceData, centerName, c, period);
   }
 
