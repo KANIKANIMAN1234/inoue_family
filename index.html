@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家族収支管理 v6.5</title>
+  <title>家族収支管理 v6.5.1</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
@@ -37,12 +37,11 @@
     .list-item { border-bottom: 1px solid #f0f0f0; padding: 12px 0; display: flex; justify-content: space-between; align-items: center; }
     .income-text { color: var(--line-blue); }
     .expense-text { color: #d9534f; }
-    .small-thumb { width: 35px; height: 35px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; margin-left: 2px; }
+    .small-thumb { width: 35px; height: 35px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; margin-left: 2px; cursor: pointer; }
 
     #submitBtn { background: var(--line-green); color: white; border: none; width: 100%; padding: 15px; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
     #submitBtn:disabled { background: #ccc; }
     
-    /* グラフセクション */
     .chart-section { margin-top: 20px; text-align: center; }
     .chart-title { font-size: 14px; font-weight: bold; color: #666; margin-bottom: 10px; }
     .chart-container { position: relative; width: 100%; margin: auto; margin-bottom: 30px; }
@@ -112,6 +111,11 @@
   </div>
 </div>
 
+<div id="imageModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; justify-content:center; align-items:center; flex-direction:column;" onclick="closeModal()">
+  <img id="modalImg" style="max-width:90%; max-height:80%; border-radius:8px; box-shadow:0 0 20px rgba(0,0,0,0.5);">
+  <div style="color:white; margin-top:15px; font-weight:bold; background:rgba(255,255,255,0.2); padding:5px 15px; border-radius:20px;">閉じる</div>
+</div>
+
 <script>
   const LIFF_ID = "2009115464-7gzud84W";
   const GAS_URL = "https://script.google.com/macros/s/AKfycbxOUKczQx_NTwbKMvHxOsOU8ciAS7xV4jd5b_s4gAutT2ZcRPvHH6q9zRGY3f1hxMme/exec";
@@ -129,11 +133,18 @@
   window.onload = function() {
     liff.init({ liffId: LIFF_ID }).then(() => {
       if (!liff.isLoggedIn()) { liff.login(); return; }
+      return liff.getProfile();
+    }).then(async (p) => {
+      if (!p) return;
       document.getElementById('submitBtn').disabled = false;
       document.getElementById('submitBtn').innerText = "登録する";
+      
+      // 起動時に自動ユーザー登録を実行
+      await callGas("register", { userId: p.userId, displayName: p.displayName });
+      
       updateCategoryOptions();
       initFilters();
-    });
+    }).catch(err => console.error("LIFF Init Error:", err));
     document.getElementById('date').value = new Date().toISOString().split('T')[0];
   };
 
@@ -142,18 +153,40 @@
     return await res.json();
   }
 
+  // GoogleドライブのURLを直リンクに変換
+  function getDirectLink(url) {
+    if (!url || url.indexOf('drive.google.com') === -1) return url;
+    const match = url.match(/\/(?:d|file\/d|open\?id=)([\w-]+)/);
+    return (match && match[1]) ? `https://drive.google.com/uc?export=view&id=${match[1]}` : url;
+  }
+
   async function initFilters() {
     const res = await callGas("getUsers", {});
     const users = res.result || [];
     const userSels = [document.getElementById('filterUser'), document.getElementById('summaryUser')];
-    users.forEach(u => userSels.forEach(s => s.add(new Option(u, u))));
+    userSels.forEach(s => {
+      s.innerHTML = '<option value="">全員</option>';
+      users.forEach(u => s.add(new Option(u, u)));
+    });
+    
     const yearSels = [document.getElementById('filterYear'), document.getElementById('summaryYear')];
-    for(let y=2025; y<=2030; y++) yearSels.forEach(s => s.add(new Option(y + "年", y)));
+    yearSels.forEach(s => {
+        s.innerHTML = '<option value="">年</option>';
+        for(let y=2025; y<=2030; y++) s.add(new Option(y + "年", y));
+    });
+
     const monthSels = [document.getElementById('filterMonth'), document.getElementById('summaryMonth')];
-    for(let m=1; m<=12; m++) monthSels.forEach(s => s.add(new Option(m + "月", m)));
+    monthSels.forEach(s => {
+        s.innerHTML = '<option value="">月</option>';
+        for(let m=1; m<=12; m++) s.add(new Option(m + "月", m));
+    });
+
     const allCats = [...new Set([...categories["出金"], ...categories["入金"]])].sort();
     const catSels = [document.getElementById('filterCategory'), document.getElementById('summaryCategory')];
-    allCats.forEach(c => catSels.forEach(s => s.add(new Option(c, c))));
+    catSels.forEach(s => {
+        s.innerHTML = '<option value="">全分類</option>';
+        allCats.forEach(c => s.add(new Option(c, c)));
+    });
   }
 
   function setType(t) {
@@ -204,7 +237,17 @@
       total += isInc ? item.amount : -item.amount;
       const div = document.createElement('div');
       div.className = 'list-item';
-      div.innerHTML = `<div><div class="item-main">${item.shop} [${item.category}]</div><div class="item-sub">${item.date} (${item.userName})</div></div><div style="text-align:right"><div class="item-price ${isInc?'income-text':'expense-text'}">${isInc?'+':'-'}¥${item.amount.toLocaleString()}</div><div style="display:flex; justify-content:flex-end">${item.imageUrls.map(url => url!=='画像なし'?`<img src="${url}" class="small-thumb" onclick="openModal('${url}')">`:'').join('')}</div></div>`;
+      div.innerHTML = `
+        <div>
+          <div class="item-main">${item.shop} [${item.category}]</div>
+          <div class="item-sub">${item.date} (${item.userName})</div>
+        </div>
+        <div style="text-align:right">
+          <div class="item-price ${isInc?'income-text':'expense-text'}">${isInc?'+':'-'}¥${item.amount.toLocaleString()}</div>
+          <div style="display:flex; justify-content:flex-end">
+            ${item.imageUrls.map(url => url !== '画像なし' ? `<img src="${getDirectLink(url)}" class="small-thumb" onclick="openModal('${url}')">` : '').join('')}
+          </div>
+        </div>`;
       container.appendChild(div);
     });
     document.getElementById('listTotal').innerText = `収支合計: ¥${total.toLocaleString()}`;
@@ -216,54 +259,24 @@
     const y = document.getElementById('summaryYear').value;
     const m = document.getElementById('summaryMonth').value;
     
-    // 全収支データ（棒グラフ用）
     const balanceData = allData.filter(d => {
       const dt = new Date(d.date);
       return (!u || d.userName === u) && (!y || dt.getFullYear() == y) && (!m || (dt.getMonth()+1) == m);
     });
 
-    // 支出データのみ（ドーナツ用）
     const expenseData = balanceData.filter(d => d.type === "出金" && (!c || d.category === c));
-    
-    let centerName = (u || "全員");
-    let centerCat = (c || "");
-    let period = (y ? y + "年" : "") + (m ? m + "月" : "");
-    if (!period) period = "全期間";
-    
-    renderSummary(expenseData, balanceData, centerName, centerCat, period);
+    let centerName = (u || "全員"), period = (y ? y + "年" : "") + (m ? m + "月" : "") || "全期間";
+    renderSummary(expenseData, balanceData, centerName, c, period);
   }
 
   function renderSummary(expenseData, balanceData, name, cat, period) {
-    // ドーナツ集計
-    const stats = {};
-    let expTotal = 0;
+    const stats = {}; let expTotal = 0;
     expenseData.forEach(d => { expTotal += d.amount; stats[d.category] = (stats[d.category] || 0) + d.amount; });
+    let incSum = 0, expSum = 0;
+    balanceData.forEach(d => { if (d.type === "入金") incSum += d.amount; else expSum += d.amount; });
 
-    // 棒グラフ集計
-    let incSum = 0;
-    let expSum = 0;
-    balanceData.forEach(d => {
-      if (d.type === "入金") incSum += d.amount;
-      else expSum += d.amount;
-    });
-
-    // ドーナツグラフ描画
     if (myChart) myChart.destroy();
     const ctxD = document.getElementById('myChart').getContext('2d');
-    const centerTextPlugin = {
-      id: 'centerText',
-      afterDatasetsDraw(chart) {
-        const { ctx } = chart; ctx.save();
-        const x = chart.getDatasetMeta(0).data[0].x;
-        const y = chart.getDatasetMeta(0).data[0].y;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#333';
-        ctx.fillText(name + (cat ? " ["+cat+"]" : ""), x, y - 10);
-        ctx.font = '11px sans-serif'; ctx.fillStyle = '#999';
-        ctx.fillText(period, x, y + 12); ctx.restore();
-      }
-    };
-
     myChart = new Chart(ctxD, {
       type: 'doughnut',
       data: {
@@ -280,10 +293,20 @@
           tooltip: { callbacks: { label: (c) => `${c.label}: ¥${c.raw.toLocaleString()} (${((c.raw/expTotal)*100).toFixed(1)}%)` } }
         }
       },
-      plugins: [centerTextPlugin]
+      plugins: [{
+        id: 'centerText',
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart; ctx.save();
+          const x = chart.getDatasetMeta(0).data[0].x, y = chart.getDatasetMeta(0).data[0].y;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#333';
+          ctx.fillText(name + (cat ? " ["+cat+"]" : ""), x, y - 10);
+          ctx.font = '11px sans-serif'; ctx.fillStyle = '#999';
+          ctx.fillText(period, x, y + 12); ctx.restore();
+        }
+      }]
     });
 
-    // 棒グラフ描画
     if (myBarChart) myBarChart.destroy();
     const ctxB = document.getElementById('barChart').getContext('2d');
     myBarChart = new Chart(ctxB, {
@@ -292,19 +315,15 @@
         labels: ['入金', '出金'],
         datasets: [{
           data: [incSum, expSum],
-          backgroundColor: [window.getComputedStyle(document.documentElement).getPropertyValue('--line-blue'), '#d9534f'],
+          backgroundColor: ['#007bff', '#d9534f'],
           borderRadius: 6
         }]
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          y: { 
-            beginAtZero: true, 
-            ticks: { font: { size: 10 }, callback: (v) => '¥' + v.toLocaleString() }
-          },
+          y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: (v) => '¥' + v.toLocaleString() } },
           x: { ticks: { font: { size: 12, weight: 'bold' } } }
         }
       }
@@ -334,9 +353,10 @@
   }
 
   function removeImg(i) { imageBlobs.splice(i, 1); renderPreviews(); }
+
   async function sendData() {
     const amt = document.getElementById('amount').value;
-    if (!amt) return alert("金額入力！");
+    if (!amt) return alert("金額を入力してください");
     const btn = document.getElementById('submitBtn');
     btn.disabled = true; btn.innerText = "送信中...";
     const p = await liff.getProfile();
@@ -346,26 +366,19 @@
       date: document.getElementById('date').value, imageBlobs: imageBlobs
     });
     if (res.status === "success") { alert("完了！"); location.reload(); }
-    else { alert("失敗"); btn.disabled = false; }
+    else { alert("失敗しました"); btn.disabled = false; btn.innerText = "登録する"; }
   }
 
-  // モーダルを開く関数
-function openModal(url) {
-  const modal = document.getElementById('imageModal');
-  const modalImg = document.getElementById('modalImg');
-  modalImg.src = url;
-  modal.style.display = 'flex';
-}
+  function openModal(url) {
+    const modal = document.getElementById('imageModal');
+    const modalImg = document.getElementById('modalImg');
+    modalImg.src = getDirectLink(url);
+    modal.style.display = 'flex';
+  }
 
-// モーダルを閉じる関数
-function closeModal() {
-  document.getElementById('imageModal').style.display = 'none';
-}
-
+  function closeModal() {
+    document.getElementById('imageModal').style.display = 'none';
+  }
 </script>
-<div id="imageModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; justify-content:center; align-items:center; flex-direction:column;" onclick="closeModal()">
-  <img id="modalImg" style="max-width:90%; max-height:80%; border-radius:8px; box-shadow:0 0 20px rgba(0,0,0,0.5);">
-  <div style="color:white; margin-top:15px; font-weight:bold; background:rgba(255,255,255,0.2); padding:5px 15px; border-radius:20px;">閉じる</div>
-</div>
 </body>
 </html>
