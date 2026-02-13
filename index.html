@@ -184,13 +184,13 @@
    */
   async function initFilters() {
     const res = await callGas("getUsers", {});
-    const users = res.result || [];
+    const users = res.result || []; // [{lineId: "xxx", name: "太郎"}, ...]
     
-    // ユーザー選択肢
+    // ユーザー選択肢（値はlineId、表示は名前）
     const userSels = [document.getElementById('filterUser'), document.getElementById('summaryUser')];
     userSels.forEach(s => {
       s.innerHTML = '<option value="">全員</option>';
-      users.forEach(u => s.add(new Option(u, u)));
+      users.forEach(u => s.add(new Option(u.name, u.lineId)));
     });
     
     // 年選択肢 (2025〜2030)
@@ -253,13 +253,13 @@
   }
 
   function applyFilters() {
-    const u = document.getElementById('filterUser').value;
+    const u = document.getElementById('filterUser').value; // lineId
     const c = document.getElementById('filterCategory').value;
     const y = document.getElementById('filterYear').value;
     const m = document.getElementById('filterMonth').value;
     const filtered = allData.filter(d => {
       const dt = new Date(d.date);
-      return (!u || d.userName === u) && (!c || d.category === c) && (!y || dt.getFullYear() == y) && (!m || (dt.getMonth()+1) == m);
+      return (!u || d.lineId === u) && (!c || d.category === c) && (!y || dt.getFullYear() == y) && (!m || (dt.getMonth()+1) == m);
     });
     renderList(filtered);
   }
@@ -299,14 +299,14 @@
    * 7. サマリー表示
    */
   function applySummaryFilters() {
-    const u = document.getElementById('summaryUser').value;
+    const u = document.getElementById('summaryUser').value; // lineId
     const c = document.getElementById('summaryCategory').value;
     const y = document.getElementById('summaryYear').value;
     const m = document.getElementById('summaryMonth').value;
     
     const balanceData = allData.filter(d => {
       const dt = new Date(d.date);
-      return (!u || d.userName === u) && (!y || dt.getFullYear() == y) && (!m || (dt.getMonth()+1) == m);
+      return (!u || d.lineId === u) && (!y || dt.getFullYear() == y) && (!m || (dt.getMonth()+1) == m);
     });
 
     const expenseData = balanceData.filter(d => d.type === "出金" && (!c || d.category === c));
