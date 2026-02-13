@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家族収支管理 v6.5.1</title>
+  <title>家族収支管理 v6.5.2</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
@@ -111,7 +111,7 @@
   </div>
 </div>
 
-<div id="imageModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; justify-content:center; align-items:center; flex-direction:column;" onclick="closeModal()">
+<div id="imageModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:1000; justify-content:center; align-items:center; flex-direction:column;" onclick="closeModal()">
   <img id="modalImg" style="max-width:90%; max-height:80%; border-radius:8px; box-shadow:0 0 20px rgba(0,0,0,0.5);">
   <div style="color:white; margin-top:15px; font-weight:bold; background:rgba(255,255,255,0.2); padding:5px 15px; border-radius:20px;">閉じる</div>
 </div>
@@ -130,6 +130,14 @@
     "入金": ["給与", "賞与", "副業", "還付金", "お小遣い", "年金", "冠婚葬祭", "他"]
   };
 
+  // GoogleドライブのURLを高精細な画像直リンク(lh3形式)に変換する関数
+  function getDirectLink(url) {
+    if (!url || url.indexOf('drive.google.com') === -1) return url;
+    const match = url.match(/\/(?:d|file\/d|open\?id=)([\w-]+)/);
+    // 最新のGoogleコンテンツプロキシ経由で画像を取得
+    return (match && match[1]) ? `https://lh3.googleusercontent.com/d/${match[1]}` : url;
+  }
+
   window.onload = function() {
     liff.init({ liffId: LIFF_ID }).then(() => {
       if (!liff.isLoggedIn()) { liff.login(); return; }
@@ -139,7 +147,7 @@
       document.getElementById('submitBtn').disabled = false;
       document.getElementById('submitBtn').innerText = "登録する";
       
-      // 起動時に自動ユーザー登録を実行
+      // ★起動時に自動ユーザー登録を実行（awaitを使い完了を待つ）
       await callGas("register", { userId: p.userId, displayName: p.displayName });
       
       updateCategoryOptions();
@@ -153,34 +161,32 @@
     return await res.json();
   }
 
-  // GoogleドライブのURLを直リンクに変換
-  function getDirectLink(url) {
-    if (!url || url.indexOf('drive.google.com') === -1) return url;
-    const match = url.match(/\/(?:d|file\/d|open\?id=)([\w-]+)/);
-    return (match && match[1]) ? `https://drive.google.com/uc?export=view&id=${match[1]}` : url;
-  }
-
   async function initFilters() {
     const res = await callGas("getUsers", {});
     const users = res.result || [];
+    
+    // ユーザーフィルタの初期化
     const userSels = [document.getElementById('filterUser'), document.getElementById('summaryUser')];
     userSels.forEach(s => {
       s.innerHTML = '<option value="">全員</option>';
       users.forEach(u => s.add(new Option(u, u)));
     });
     
+    // 年フィルタの初期化 (2025-2030)
     const yearSels = [document.getElementById('filterYear'), document.getElementById('summaryYear')];
     yearSels.forEach(s => {
         s.innerHTML = '<option value="">年</option>';
         for(let y=2025; y<=2030; y++) s.add(new Option(y + "年", y));
     });
 
+    // 月フィルタの初期化 (1-12)
     const monthSels = [document.getElementById('filterMonth'), document.getElementById('summaryMonth')];
     monthSels.forEach(s => {
         s.innerHTML = '<option value="">月</option>';
         for(let m=1; m<=12; m++) s.add(new Option(m + "月", m));
     });
 
+    // カテゴリフィルタの初期化
     const allCats = [...new Set([...categories["出金"], ...categories["入金"]])].sort();
     const catSels = [document.getElementById('filterCategory'), document.getElementById('summaryCategory')];
     catSels.forEach(s => {
@@ -204,7 +210,8 @@
 
   function showPage(p) {
     document.querySelectorAll('.page, .tab').forEach(el => el.classList.remove('active'));
-    document.getElementById('page' + p.charAt(0).toUpperCase() + p.slice(1)).classList.add('active');
+    const pageId = 'page' + p.charAt(0).toUpperCase() + p.slice(1);
+    document.getElementById(pageId).classList.add('active');
     document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (p==='input'&&i===0)||(p==='list'&&i===1)||(p==='summary'&&i===2)));
     if (p !== 'input') fetchAllData(p);
   }
@@ -240,10 +247,10 @@
       div.innerHTML = `
         <div>
           <div class="item-main">${item.shop} [${item.category}]</div>
-          <div class="item-sub">${item.date} (${item.userName})</div>
+          <div class="item-sub" style="font-size:11px; color:#999;">${item.date} (${item.userName})</div>
         </div>
         <div style="text-align:right">
-          <div class="item-price ${isInc?'income-text':'expense-text'}">${isInc?'+':'-'}¥${item.amount.toLocaleString()}</div>
+          <div class="item-price ${isInc?'income-text':'expense-text'}" style="font-weight:bold;">${isInc?'+':'-'}¥${item.amount.toLocaleString()}</div>
           <div style="display:flex; justify-content:flex-end">
             ${item.imageUrls.map(url => url !== '画像なし' ? `<img src="${getDirectLink(url)}" class="small-thumb" onclick="openModal('${url}')">` : '').join('')}
           </div>
@@ -369,13 +376,16 @@
     else { alert("失敗しました"); btn.disabled = false; btn.innerText = "登録する"; }
   }
 
+  // ポップアップを開く
   function openModal(url) {
     const modal = document.getElementById('imageModal');
     const modalImg = document.getElementById('modalImg');
+    // ダイレクトリンクに変換してから表示
     modalImg.src = getDirectLink(url);
     modal.style.display = 'flex';
   }
 
+  // ポップアップを閉じる
   function closeModal() {
     document.getElementById('imageModal').style.display = 'none';
   }
